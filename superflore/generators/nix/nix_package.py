@@ -100,6 +100,11 @@ class NixPackage:
         # two cases, so they are added to both, which generally works fine.
         build_inputs = set(self._resolve_dependencies(
             build_deps | buildtool_deps))
+        # A dependency needed both to build and to run is almost always one
+        # whose headers or CMake config are re-exported, even when the package
+        # forgot to say so with <depend> or <build_export_depend>.
+        build_export_deps = build_export_deps | (build_deps & exec_deps)
+
         propagated_build_inputs = self._resolve_dependencies(
             build_export_deps | buildtool_export_deps |
             {d for d in exec_deps if d not in self._all_pkgs})
