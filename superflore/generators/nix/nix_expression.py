@@ -133,7 +133,8 @@ class NixExpression:
                  propagated_build_inputs: Set[str] = set(),
                  check_inputs: Set[str] = set(),
                  native_build_inputs: Set[str] = set(),
-                 propagated_native_build_inputs: Set[str] = set()
+                 propagated_native_build_inputs: Set[str] = set(),
+                 ros_exec_depends: Set[str] = set()
                  ) -> None:
         self.name = name
         self.version = version
@@ -154,6 +155,7 @@ class NixExpression:
         self.native_build_inputs = native_build_inputs
         self.propagated_native_build_inputs = \
             propagated_native_build_inputs
+        self.ros_exec_depends = ros_exec_depends
 
     @staticmethod
     def _to_nix_list(it: Iterable[str]) -> str:
@@ -184,7 +186,8 @@ class NixExpression:
                                         self.propagated_build_inputs |
                                         self.check_inputs |
                                         self.native_build_inputs |
-                                        self.propagated_native_build_inputs)))
+                                        self.propagated_native_build_inputs |
+                                        self.ros_exec_depends)))
                          ) + ' }:'
 
         ret += dedent('''
@@ -228,6 +231,10 @@ class NixExpression:
         if self.propagated_native_build_inputs:
             ret += "  propagatedNativeBuildInputs = {};\n".format(
                 self._to_nix_list(sorted(self.propagated_native_build_inputs)))
+
+        if self.ros_exec_depends:
+            ret += "  rosExecDepends = {};\n".format(
+                self._to_nix_list(sorted(self.ros_exec_depends)))
 
         ret += dedent('''
           meta = {{

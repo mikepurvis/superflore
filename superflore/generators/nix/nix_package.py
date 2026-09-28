@@ -101,8 +101,18 @@ class NixPackage:
         build_inputs = set(self._resolve_dependencies(
             build_deps | buildtool_deps))
         propagated_build_inputs = self._resolve_dependencies(
-            exec_deps | build_export_deps | buildtool_export_deps)
+            build_export_deps | buildtool_export_deps |
+            {d for d in exec_deps if d not in self._all_pkgs})
         build_inputs -= propagated_build_inputs
+
+        # Propagating every ROS exec_depend makes each package drag its whole
+        # runtime closure into the build environment of everything downstream,
+        # which bloats compiler flags and env vars past the kernel's argument
+        # limit in large workspaces. They are only needed at runtime, so they
+        # are recorded separately and buildEnv assembles the runtime closure.
+        ros_exec_depends = self._resolve_dependencies(
+            d for d in exec_deps if d in self._all_pkgs)
+        ros_exec_depends -= propagated_build_inputs
 
         check_inputs = self._resolve_dependencies(test_deps)
         check_inputs -= build_inputs
@@ -122,7 +132,8 @@ class NixPackage:
             build_inputs=build_inputs,
             propagated_build_inputs=propagated_build_inputs,
             check_inputs=check_inputs,
-            native_build_inputs=native_build_inputs)
+            native_build_inputs=native_build_inputs,
+            ros_exec_depends=ros_exec_depends)
 
     def _resolve_dependencies(self, deps: Iterable[str]) -> Set[str]:
         return set(itertools.chain.from_iterable(
