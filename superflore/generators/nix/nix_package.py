@@ -92,38 +92,43 @@ class NixPackage:
 
         self.unresolved_dependencies = set()
 
+        def ros(deps):
+            return {d for d in deps if d in self._all_pkgs}
+
+        # A dependency needed both to build and to run is almost always one
+        # whose headers or CMake config are re-exported, even when the package
+        # forgot to say so with <depend> or <build_export_depend>.
+        export_deps = build_export_deps | buildtool_export_deps | \
+            (build_deps & exec_deps)
+
+        # Non-ROS dependencies are propagated as usual. ROS dependencies are
+        # not: propagating them would make every package wait on, and carry,
+        # the whole transitive ROS graph. Instead the exported and exec
+        # dependencies are recorded, and buildRosPackage gives each package
+        # its direct build dependencies plus their recursive exports, while
+        # buildEnv follows both lists to assemble runtime environments.
+        propagated_build_inputs = self._resolve_dependencies(
+            (export_deps | exec_deps) - ros(export_deps | exec_deps))
+        ros_build_export_depends = self._resolve_dependencies(
+            ros(export_deps))
+        ros_exec_depends = self._resolve_dependencies(ros(exec_deps))
+        ros_exec_depends -= ros_build_export_depends
+
         # buildtool_depends are added to buildInputs and nativeBuildInputs.
         # Some (such as CMake) have binaries that need to run at build time
         # (and therefore need to be in nativeBuildInputs. Others (such as
         # ament_cmake_*) need to be added to CMAKE_PREFIX_PATH and therefore
         # need to be in buildInputs. There is no easy way to distinguish these
         # two cases, so they are added to both, which generally works fine.
-        build_inputs = set(self._resolve_dependencies(
-            build_deps | buildtool_deps))
-        # A dependency needed both to build and to run is almost always one
-        # whose headers or CMake config are re-exported, even when the package
-        # forgot to say so with <depend> or <build_export_depend>.
-        build_export_deps = build_export_deps | (build_deps & exec_deps)
-
-        propagated_build_inputs = self._resolve_dependencies(
-            build_export_deps | buildtool_export_deps |
-            {d for d in exec_deps if d not in self._all_pkgs})
+        build_inputs = self._resolve_dependencies(build_deps | buildtool_deps)
         build_inputs -= propagated_build_inputs
-
-        # Propagating every ROS exec_depend makes each package drag its whole
-        # runtime closure into the build environment of everything downstream,
-        # which bloats compiler flags and env vars past the kernel's argument
-        # limit in large workspaces. They are only needed at runtime, so they
-        # are recorded separately and buildEnv assembles the runtime closure.
-        ros_exec_depends = self._resolve_dependencies(
-            d for d in exec_deps if d in self._all_pkgs)
-        ros_exec_depends -= propagated_build_inputs
 
         check_inputs = self._resolve_dependencies(test_deps)
         check_inputs -= build_inputs
 
         native_build_inputs = self._resolve_dependencies(
-            buildtool_deps | buildtool_export_deps)
+            buildtool_deps |
+            (buildtool_export_deps - ros(buildtool_export_deps)))
 
         self._derivation = NixExpression(
             name=normalized_name,
@@ -138,6 +143,7 @@ class NixPackage:
             propagated_build_inputs=propagated_build_inputs,
             check_inputs=check_inputs,
             native_build_inputs=native_build_inputs,
+            ros_build_export_depends=ros_build_export_depends,
             ros_exec_depends=ros_exec_depends)
 
     def _resolve_dependencies(self, deps: Iterable[str]) -> Set[str]:
