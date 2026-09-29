@@ -105,8 +105,9 @@ class NixPackage:
         # not: propagating them would make every package wait on, and carry,
         # the whole transitive ROS graph. Instead the exported and exec
         # dependencies are recorded, and buildRosPackage gives each package
-        # its direct build dependencies plus their recursive exports, while
-        # buildEnv follows both lists to assemble runtime environments.
+        # its direct build dependencies plus their recursive runtime closure
+        # (as colcon does), while buildEnv follows both lists to assemble
+        # environments.
         propagated_build_inputs = self._resolve_dependencies(
             (export_deps | exec_deps) - ros(export_deps | exec_deps))
         ros_build_export_depends = self._resolve_dependencies(
