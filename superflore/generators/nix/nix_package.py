@@ -112,8 +112,10 @@ class NixPackage:
             (export_deps | exec_deps) - ros(export_deps | exec_deps))
         ros_build_export_depends = self._resolve_dependencies(
             ros(export_deps))
+        # Kept complete even where it overlaps the exports, so that a runtime
+        # environment can follow exec dependencies alone and leave out
+        # build-only exports such as ament_cmake and rosidl generators.
         ros_exec_depends = self._resolve_dependencies(ros(exec_deps))
-        ros_exec_depends -= ros_build_export_depends
 
         # buildtool_depends are added to buildInputs and nativeBuildInputs.
         # Some (such as CMake) have binaries that need to run at build time
